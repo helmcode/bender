@@ -1,23 +1,29 @@
-name: Build Docker Images
+name: Release & Build Images
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    paths:
+      - "src/bender/__init__.py"
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  validate-version:
-    name: Validate tag matches __version__
+  release:
+    name: Create release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.extract.outputs.version }}
+      created: ${{ steps.check.outputs.created }}
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Extract version from __init__.py
         id: extract
@@ -26,20 +32,33 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Extracted version: $VERSION"
 
-      - name: Validate tag matches version
+      - name: Check if tag already exists
+        id: check
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
           VERSION="${{ steps.extract.outputs.version }}"
-          if [ "$TAG" != "$VERSION" ]; then
-            echo "::error::Tag v$TAG does not match __version__ ($VERSION) in src/bender/__init__.py"
-            exit 1
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists, skipping"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag v$VERSION does not exist, creating release"
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "Tag v$TAG matches __version__ $VERSION"
+
+      - name: Create tag and GitHub release
+        if: steps.check.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" --generate-notes --title "v$VERSION"
 
   build-base:
     name: Build base image
     runs-on: ubuntu-latest
-    needs: validate-version
+    needs: release
+    if: needs.release.outputs.created == 'true'
     permissions:
       contents: read
       packages: write
@@ -65,13 +84,14 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.release.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
   build-infra:
     name: Build infra image
     runs-on: ubuntu-latest
-    needs: validate-version
+    needs: release
+    if: needs.release.outputs.created == 'true'
     permissions:
       contents: read
       packages: write
@@ -97,5 +117,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:infra-${{ needs.validate-version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:infra-${{ needs.release.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:infra-latest
