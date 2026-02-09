@@ -180,8 +180,8 @@ spec:
           restartPolicy: Never
           containers:
             - name: poll
-              image: curlimages/curl:8.5.0
-              command: ["/bin/sh", "/scripts/poll.sh"]
+              image: alpine:3.21
+              command: ["/bin/sh", "-c", "apk add --no-cache curl jq >/dev/null 2>&1 && /bin/sh /scripts/poll.sh"]
               envFrom:
                 - secretRef:
                     name: {{ .Values.vault.secrets.env.destinationSecretName }}
