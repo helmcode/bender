@@ -7,12 +7,12 @@ metadata:
     {{- include "bender.labels" . | nindent 4 }}
 data:
   poll.sh: |
-    #!/bin/bash
+    #!/bin/sh
     #
     # Leantime polling script — detects new tasks assigned to Bender
     # All configuration comes from environment variables (Vault secret)
     #
-    set -euo pipefail
+    set -eu
 
     # Required env vars (from Vault):
     #   LEANTIME_URL, LEANTIME_API_KEY, BENDER_API_KEY,
@@ -27,17 +27,14 @@ data:
     PROJECT_ID="${LEANTIME_PROJECT_ID:-3}"
     STATUS_NEW="${LEANTIME_STATUS_NEW:-3}"
     EDITOR_ID="${LEANTIME_EDITOR_ID:-17}"
-
-    IFS=',' read -ra VALID_TAGS <<< "${LEANTIME_VALID_TAGS:-}"
+    VALID_TAGS="${LEANTIME_VALID_TAGS:-}"
 
     log()   { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
     error() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2; }
 
     notify_bender() {
-      local task_id
       task_id=$(echo "$1" | jq -r '.id')
 
-      local http_code
       http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BENDER_API_URL}/api/invoke" \
         -H "Authorization: Bearer ${BENDER_API_KEY}" \
         -H "Content-Type: application/json" \
@@ -46,7 +43,7 @@ data:
           \"message\": \"New Leantime task assigned: ID ${task_id}. Read task details from Leantime API and follow the assigned tasks workflow.\"
         }" 2>&1)
 
-      if [[ "$http_code" -ge 200 && "$http_code" -lt 300 ]]; then
+      if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
         log "Bender notified for task $task_id (HTTP $http_code)"
       else
         error "Failed to notify Bender for task $task_id (HTTP $http_code)"
@@ -55,8 +52,8 @@ data:
     }
 
     notify_slack() {
-      local message="$1"
-      if [[ -z "${SLACK_BOT_TOKEN:-}" ]]; then
+      message="$1"
+      if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
         error "SLACK_BOT_TOKEN not set"
         return 1
       fi
@@ -66,40 +63,47 @@ data:
         -d "{\"channel\":\"${SLACK_CHANNEL}\",\"text\":\"${message}\"}" > /dev/null 2>&1
     }
 
+    is_valid_tag() {
+      tag="$1"
+      echo "$VALID_TAGS" | tr ',' '\n' | while read -r valid; do
+        if [ "$tag" = "$valid" ]; then
+          return 0
+        fi
+      done
+      return 1
+    }
+
     validate_task() {
-      local task_json="$1"
-      local task_id headline description tags
+      task_json="$1"
       task_id=$(echo "$task_json" | jq -r '.id')
       headline=$(echo "$task_json" | jq -r '.headline // empty')
       description=$(echo "$task_json" | jq -r '.description // empty')
       tags=$(echo "$task_json" | jq -r '.tags // empty')
 
-      local errors=()
-      [[ -z "$headline" ]] && errors+=("missing headline")
-      [[ -z "$description" ]] && errors+=("missing description")
+      errors=""
 
-      if [[ -z "$tags" ]]; then
-        errors+=("no client tag")
+      if [ -z "$headline" ]; then
+        errors="${errors}  - missing headline\n"
+      fi
+
+      if [ -z "$description" ]; then
+        errors="${errors}  - missing description\n"
+      fi
+
+      if [ -z "$tags" ]; then
+        errors="${errors}  - no client tag\n"
       else
-        local tag_count
-        tag_count=$(echo "$tags" | tr ',' '\n' | wc -l)
-        if [[ $tag_count -gt 1 ]]; then
-          errors+=("multiple tags: '$tags' (must have exactly 1)")
-        else
-          local tag_valid=false
-          for valid_tag in "${VALID_TAGS[@]}"; do
-            [[ "$tags" == "$valid_tag" ]] && tag_valid=true && break
-          done
-          [[ "$tag_valid" == "false" ]] && errors+=("invalid tag: '$tags'")
+        tag_count=$(echo "$tags" | tr ',' '\n' | wc -l | tr -d ' ')
+        if [ "$tag_count" -gt 1 ]; then
+          errors="${errors}  - multiple tags: '${tags}' (must have exactly 1)\n"
+        elif ! is_valid_tag "$tags"; then
+          errors="${errors}  - invalid tag: '${tags}'\n"
         fi
       fi
 
-      if [[ ${#errors[@]} -gt 0 ]]; then
-        local error_msg="Task ID $task_id has validation issues:\\n"
-        for err in "${errors[@]}"; do error_msg+="  - $err\\n"; done
-        error_msg+="\\nPlease correct before processing.\\n"
-        error_msg+="Link: ${LEANTIME_URL}/tickets/showKanban#/tickets/showTicket/$task_id"
-        log "Task $task_id failed validation: ${errors[*]}"
+      if [ -n "$errors" ]; then
+        error_msg="Task ID $task_id has validation issues:\n${errors}\nPlease correct before processing.\nLink: ${LEANTIME_URL}/tickets/showKanban#/tickets/showTicket/$task_id"
+        log "Task $task_id failed validation"
         notify_slack "$error_msg"
         return 1
       fi
@@ -109,7 +113,7 @@ data:
     # === MAIN ===
     log "=== Leantime polling start ==="
 
-    if [[ -z "${LEANTIME_API_KEY:-}" ]]; then
+    if [ -z "${LEANTIME_API_KEY:-}" ]; then
       error "LEANTIME_API_KEY not set"
       exit 1
     fi
@@ -126,21 +130,21 @@ data:
 
     tasks=$(echo "$response" | jq -c ".result[] | select(.projectId == $PROJECT_ID and .status == $STATUS_NEW and .editorId == \"$EDITOR_ID\")" 2>/dev/null || echo "")
 
-    if [[ -z "$tasks" ]]; then
+    if [ -z "$tasks" ]; then
       log "No new tasks assigned."
     else
       task_count=0
-      while IFS= read -r task; do
-        if [[ -n "$task" ]]; then
+      echo "$tasks" | while IFS= read -r task; do
+        if [ -n "$task" ]; then
           task_id=$(echo "$task" | jq -r '.id')
           log "Processing task $task_id..."
           if validate_task "$task"; then
             notify_bender "$task"
           fi
-          ((task_count++))
+          task_count=$((task_count + 1))
         fi
-      done <<< "$tasks"
-      log "Processed $task_count task(s)."
+      done
+      log "Processing complete."
     fi
 
     log "=== Leantime polling end ==="
