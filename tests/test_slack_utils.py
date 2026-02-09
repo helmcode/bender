@@ -1,6 +1,6 @@
 """Tests for the Slack utilities module."""
 
-from bender.slack_utils import SLACK_MSG_LIMIT, split_text
+from bender.slack_utils import SLACK_MSG_LIMIT, md_to_mrkdwn, split_text
 
 
 class TestSlackMsgLimit:
@@ -63,3 +63,40 @@ class TestSplitText:
         result = split_text(text, 6)
         assert result[0] == "abcde"
         assert result[1] == "fghij"
+
+
+class TestMdToMrkdwn:
+    """Tests for the md_to_mrkdwn function."""
+
+    def test_headers_to_bold(self) -> None:
+        """Markdown headers become bold text."""
+        assert md_to_mrkdwn("## Hello") == "*Hello*"
+        assert md_to_mrkdwn("### World") == "*World*"
+        assert md_to_mrkdwn("# Title") == "*Title*"
+
+    def test_bold_double_asterisk(self) -> None:
+        """Double asterisks become single asterisks."""
+        assert md_to_mrkdwn("this is **bold** text") == "this is *bold* text"
+
+    def test_links(self) -> None:
+        """Markdown links become Slack links."""
+        assert md_to_mrkdwn("[click](https://example.com)") == "<https://example.com|click>"
+
+    def test_horizontal_rule(self) -> None:
+        """Horizontal rules become empty lines."""
+        assert md_to_mrkdwn("above\n---\nbelow") == "above\n\nbelow"
+
+    def test_plain_text_unchanged(self) -> None:
+        """Plain text passes through unchanged."""
+        assert md_to_mrkdwn("just plain text") == "just plain text"
+
+    def test_code_blocks_preserved(self) -> None:
+        """Code blocks are not modified."""
+        text = "```\nkubectl get pods\n```"
+        assert md_to_mrkdwn(text) == text
+
+    def test_combined(self) -> None:
+        """Multiple conversions in one message."""
+        md = "## Task\n**Client:** helmcode\n[Link](https://example.com)"
+        expected = "*Task*\n*Client:* helmcode\n<https://example.com|Link>"
+        assert md_to_mrkdwn(md) == expected

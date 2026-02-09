@@ -8,7 +8,7 @@ from slack_bolt.async_app import AsyncApp
 from bender.claude_code import ClaudeCodeError, invoke_claude
 from bender.config import Settings
 from bender.session_manager import SessionManager
-from bender.slack_utils import SLACK_MSG_LIMIT, split_text
+from bender.slack_utils import SLACK_MSG_LIMIT, md_to_mrkdwn, split_text
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,8 @@ def _strip_mention(text: str) -> str:
 
 async def _post_response(say, text: str, thread_ts: str) -> None:
     """Post a response in the thread, splitting if it exceeds Slack's limit."""
+    text = md_to_mrkdwn(text)
+
     if len(text) <= SLACK_MSG_LIMIT:
         await say(text=text, thread_ts=thread_ts)
         return

@@ -11,7 +11,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from bender.claude_code import ClaudeCodeError, invoke_claude
 from bender.config import Settings
 from bender.session_manager import SessionManager
-from bender.slack_utils import SLACK_MSG_LIMIT, split_text
+from bender.slack_utils import SLACK_MSG_LIMIT, md_to_mrkdwn, split_text
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,8 @@ def create_api(
             ) from exc
 
         # Post the response in the thread, splitting long messages
-        chunks = split_text(response.result, SLACK_MSG_LIMIT)
+        formatted = md_to_mrkdwn(response.result)
+        chunks = split_text(formatted, SLACK_MSG_LIMIT)
         for chunk in chunks:
             await slack_client.chat_postMessage(
                 channel=request.channel,
