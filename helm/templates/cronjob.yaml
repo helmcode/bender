@@ -181,7 +181,7 @@ spec:
           containers:
             - name: poll
               image: alpine:3.21
-              command: ["/bin/sh", "-c", "apk add --no-cache curl jq >/dev/null 2>&1 && /bin/sh /scripts/poll.sh"]
+              command: ["/bin/sh", "-c", "apk add --no-cache curl jq >/dev/null 2>&1 && sh /scripts/poll.sh"]
               envFrom:
                 - secretRef:
                     name: {{ .Values.vault.secrets.env.destinationSecretName }}
@@ -192,10 +192,10 @@ spec:
               resources:
                 requests:
                   cpu: 10m
-                  memory: 16Mi
-                limits:
-                  cpu: 50m
                   memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
           volumes:
             - name: script
               configMap:
