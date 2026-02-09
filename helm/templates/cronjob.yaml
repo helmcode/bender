@@ -17,8 +17,7 @@ data:
     # Required env vars (from Vault):
     #   LEANTIME_URL, LEANTIME_API_KEY, BENDER_API_KEY,
     #   SLACK_BOT_TOKEN, SLACK_CHANNEL,
-    #   LEANTIME_PROJECT_ID, LEANTIME_STATUS_NEW, LEANTIME_EDITOR_ID,
-    #   LEANTIME_VALID_TAGS (comma-separated)
+    #   LEANTIME_PROJECT_ID, LEANTIME_STATUS_NEW, LEANTIME_EDITOR_ID
     #
     # Optional:
     #   BENDER_API_URL (defaults to in-cluster service)
@@ -27,8 +26,6 @@ data:
     PROJECT_ID="${LEANTIME_PROJECT_ID:-3}"
     STATUS_NEW="${LEANTIME_STATUS_NEW:-3}"
     EDITOR_ID="${LEANTIME_EDITOR_ID:-17}"
-    VALID_TAGS="${LEANTIME_VALID_TAGS:-}"
-
     log()   { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
     error() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2; }
 
@@ -63,16 +60,6 @@ data:
         -d "{\"channel\":\"${SLACK_CHANNEL}\",\"text\":\"${message}\"}" > /dev/null 2>&1
     }
 
-    is_valid_tag() {
-      tag="$1"
-      echo "$VALID_TAGS" | tr ',' '\n' | while read -r valid; do
-        if [ "$tag" = "$valid" ]; then
-          return 0
-        fi
-      done
-      return 1
-    }
-
     validate_task() {
       task_json="$1"
       task_id=$(echo "$task_json" | jq -r '.id')
@@ -91,13 +78,11 @@ data:
       fi
 
       if [ -z "$tags" ]; then
-        errors="${errors}  - no client tag\n"
+        errors="${errors}  - no tag (exactly 1 required)\n"
       else
         tag_count=$(echo "$tags" | tr ',' '\n' | wc -l | tr -d ' ')
         if [ "$tag_count" -gt 1 ]; then
-          errors="${errors}  - multiple tags: '${tags}' (must have exactly 1)\n"
-        elif ! is_valid_tag "$tags"; then
-          errors="${errors}  - invalid tag: '${tags}'\n"
+          errors="${errors}  - multiple tags: '${tags}' (exactly 1 required)\n"
         fi
       fi
 
