@@ -4,7 +4,7 @@ replicaCount: 1
 # Container image configuration
 image:
   repository: ghcr.io/helmcode/bender
-  tag: "infra-0.0.2"
+  tag: "infra-0.0.3"
   pullPolicy: IfNotPresent
 
 # Registry credentials (only needed for private repositories)
