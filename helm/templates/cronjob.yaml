@@ -32,34 +32,33 @@ data:
     move_to_in_progress() {
       task_json="$1"
       task_id=$(echo "$task_json" | jq -r '.id')
-      headline=$(echo "$task_json" | jq -r '.headline // empty')
-      description=$(echo "$task_json" | jq -r '.description // empty')
-      tags=$(echo "$task_json" | jq -r '.tags // empty')
-      sprint=$(echo "$task_json" | jq -r '.sprint // empty')
-      priority=$(echo "$task_json" | jq -r '.priority // "3"')
-      milestoneid=$(echo "$task_json" | jq -r '.milestoneid // empty')
+
+      # Build the update payload using jq to preserve all fields exactly
+      # (especially description which contains HTML with special characters)
+      payload=$(echo "$task_json" | jq -c '{
+        jsonrpc: "2.0",
+        method: "leantime.rpc.tickets.updateTicket",
+        params: {
+          values: {
+            id: .id,
+            projectId: .projectId,
+            headline: .headline,
+            description: (.description // ""),
+            status: "4",
+            priority: (.priority // "3"),
+            sprint: .sprint,
+            editorId: (.editorId // "17"),
+            tags: (.tags // ""),
+            milestoneid: (.milestoneid // 1080)
+          }
+        },
+        id: 1
+      }')
 
       update_response=$(curl -s "${LEANTIME_URL}/api/jsonrpc" \
         -H "x-api-key: ${LEANTIME_API_KEY}" \
         -H "Content-Type: application/json" \
-        -d "{
-          \"jsonrpc\": \"2.0\",
-          \"method\": \"leantime.rpc.tickets.updateTicket\",
-          \"params\": {
-            \"values\": {
-              \"id\": ${task_id},
-              \"projectId\": ${PROJECT_ID},
-              \"headline\": \"${headline}\",
-              \"status\": \"4\",
-              \"priority\": \"${priority}\",
-              \"sprint\": ${sprint},
-              \"editorId\": ${EDITOR_ID},
-              \"tags\": \"${tags}\",
-              \"milestoneid\": ${milestoneid}
-            }
-          },
-          \"id\": 1
-        }" 2>&1)
+        -d "$payload" 2>&1)
 
       if printf '%s' "$update_response" | tr -d '\000-\011\013-\037' | jq -e '.result' > /dev/null 2>&1; then
         log "Task $task_id moved to In Progress (status 4)"
