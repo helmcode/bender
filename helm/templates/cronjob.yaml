@@ -128,7 +128,16 @@ data:
         \"id\": 1
       }" 2>&1)
 
-    tasks=$(echo "$response" | jq -c ".result[] | select(.projectId == $PROJECT_ID and .status == $STATUS_NEW and .editorId == \"$EDITOR_ID\")" 2>/dev/null || echo "")
+    # Check for API errors before parsing
+    api_error=$(printf '%s' "$response" | tr -d '\000-\011\013-\037' | jq -r '.error // empty' 2>/dev/null || echo "")
+    if [ -n "$api_error" ]; then
+      error "Leantime API error: $api_error"
+      exit 1
+    fi
+
+    # Sanitize response: Leantime returns invalid control characters in JSON
+    # that cause jq to fail. Strip C0 control chars (except newline \012) before parsing.
+    tasks=$(printf '%s' "$response" | tr -d '\000-\011\013-\037' | jq -c ".result[] | select(.projectId == $PROJECT_ID and .status == $STATUS_NEW and .editorId == \"$EDITOR_ID\")" 2>/dev/null || echo "")
 
     if [ -z "$tasks" ]; then
       log "No new tasks assigned."
