@@ -20,6 +20,11 @@ RUN apt-get update && \
     # argocd
     curl -fsSL "https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_VERSION}/argocd-linux-${TARGETARCH}" \
       -o /usr/local/bin/argocd && chmod +x /usr/local/bin/argocd && \
+    # aws cli
+    AWS_ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "aarch64" || echo "x86_64") && \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" \
+      -o /tmp/awscliv2.zip && unzip /tmp/awscliv2.zip -d /tmp && \
+      /tmp/aws/install && rm -rf /tmp/awscliv2.zip /tmp/aws && \
     # cleanup
     apt-get purge -y unzip && \
     apt-get autoremove -y && \
