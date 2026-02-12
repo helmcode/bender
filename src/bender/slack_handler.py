@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 def register_handlers(app: AsyncApp, settings: Settings, sessions: SessionManager) -> None:
     """Register Slack event handlers on the bolt app."""
 
+    @app.event("reaction_added")
+    async def handle_reaction_added(event: dict) -> None:
+        """Ignore reaction_added events — Bender doesn't need to track reactions."""
+        pass
+
+    @app.event("reaction_removed")
+    async def handle_reaction_removed(event: dict) -> None:
+        """Ignore reaction_removed events — Bender doesn't need to track reactions."""
+        pass
+
     @app.event("app_mention")
     async def handle_mention(event: dict, say) -> None:
         """Handle new @Bender mentions — create session and invoke Claude Code."""
